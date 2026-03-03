@@ -252,8 +252,8 @@ class SpeechToTextApp:
                 sender.stop()
                 logger.debug("Delayed init: starting hotkey listener...")
                 outer_self.hotkey_listener.start()
-                logger.debug("Delayed init: starting model preload...")
-                threading.Thread(target=outer_self._ensure_model_loaded, daemon=True).start()
+                # Model will load lazily on first transcription
+                # (background loading causes bus error with MLX/Metal + rumps)
 
         self._menu_bar_app = MenuBarApp()
 
