@@ -1,0 +1,26 @@
+# Speech-to-Text Configuration
+# ============================
+
+# Hotkey to toggle recording on/off
+# Format: modifier+modifier+key (e.g., cmd+shift+space, ctrl+alt+r)
+hotkey: "cmd+shift+space"
+
+# Parakeet model to use
+# Options:
+#   mlx-community/parakeet-tdt-0.6b-v2  — English only, best accuracy (recommended)
+#   mlx-community/parakeet-tdt-0.6b-v3  — 25 languages, slightly larger
+model: "mlx-community/parakeet-tdt-0.6b-v2"
+
+# Maximum recording duration in seconds (safety limit to prevent runaway recordings)
+max_duration: 300
+
+# Audio sample rate in Hz (16000 is what Parakeet expects — don't change unless you know why)
+sample_rate: 16000
+
+# Clipboard behavior
+restore_clipboard: true    # Save/restore clipboard so we don't clobber your copied text
+add_trailing_space: true   # Add a space after pasted text so you can keep typing
+
+# Audio feedback
+sound_on_start: true       # Play a subtle sound when recording starts
+sound_on_stop: true        # Play a subtle sound when recording stops
