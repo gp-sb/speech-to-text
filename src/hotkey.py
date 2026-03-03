@@ -77,6 +77,9 @@ class HotkeyListener:
     """
     Listens for a global hotkey and fires a callback.
 
+    Uses pynput.keyboard.Listener (not GlobalHotKeys) for better
+    compatibility with rumps/AppKit event loops.
+
     Usage:
         def on_toggle():
             print("Hotkey pressed!")
@@ -95,13 +98,31 @@ class HotkeyListener:
         """
         self.hotkey_str = hotkey_str
         self.callback = callback
-        self._listener: Optional[keyboard.GlobalHotKeys] = None
-        self._thread: Optional[threading.Thread] = None
+        self._listener: Optional[keyboard.Listener] = None
         self._running = False
+        self._pressed_keys: set = set()
+        self._hotkey_active = False  # Prevent repeated triggers while held
 
-        # Parse to pynput format
-        self._pynput_hotkey = parse_hotkey_string(hotkey_str)
-        logger.info(f"Hotkey configured: {hotkey_str} \u2192 {self._pynput_hotkey}")
+        # Parse hotkey into required keys
+        self._required_keys = self._parse_hotkey(hotkey_str)
+        logger.info(f"Hotkey configured: {hotkey_str} → {self._required_keys}")
+
+    def _parse_hotkey(self, hotkey_str: str) -> set:
+        """Parse hotkey string into a set of pynput key objects."""
+        parts = [p.strip().lower() for p in hotkey_str.split("+")]
+        keys = set()
+        for part in parts:
+            if part in _KEY_MAP:
+                keys.add(_KEY_MAP[part])
+            elif len(part) == 1:
+                keys.add(keyboard.KeyCode.from_char(part))
+            else:
+                # Try as pynput key name
+                try:
+                    keys.add(getattr(keyboard.Key, part))
+                except AttributeError:
+                    logger.warning(f"Unknown key: {part}")
+        return keys
 
     def start(self):
         """Start listening for the global hotkey in a background thread."""
@@ -110,14 +131,16 @@ class HotkeyListener:
             return
 
         self._running = True
+        self._pressed_keys = set()
 
-        self._listener = keyboard.GlobalHotKeys({
-            self._pynput_hotkey: self._on_hotkey,
-        })
+        self._listener = keyboard.Listener(
+            on_press=self._on_press,
+            on_release=self._on_release,
+        )
         self._listener.daemon = True
         self._listener.start()
 
-        logger.info(f"Hotkey listener started \u2014 press {self.hotkey_str} to toggle")
+        logger.info(f"Hotkey listener started — press {self.hotkey_str} to toggle")
 
     def stop(self):
         """Stop the hotkey listener."""
@@ -129,15 +152,54 @@ class HotkeyListener:
 
         logger.info("Hotkey listener stopped")
 
-    def _on_hotkey(self):
+    def _normalize_key(self, key):
+        """Normalize a key for comparison."""
+        # Handle special cases for modifier keys
+        if hasattr(key, 'vk'):
+            # Map left/right variants to generic modifier
+            if key.vk in (54, 55):  # Left/Right Cmd
+                return keyboard.Key.cmd
+            if key.vk in (56, 60):  # Left/Right Shift
+                return keyboard.Key.shift
+            if key.vk in (58, 61):  # Left/Right Alt/Option
+                return keyboard.Key.alt
+            if key.vk in (59, 62):  # Left/Right Ctrl
+                return keyboard.Key.ctrl
+        return key
+
+    def _on_press(self, key):
+        """Track key presses and check for hotkey combo."""
+        if not self._running:
+            return
+
+        normalized = self._normalize_key(key)
+        self._pressed_keys.add(normalized)
+
+        # Check if all required keys are pressed
+        if self._required_keys.issubset(self._pressed_keys):
+            if not self._hotkey_active:
+                self._hotkey_active = True
+                self._trigger_callback()
+
+    def _on_release(self, key):
+        """Track key releases."""
+        if not self._running:
+            return
+
+        normalized = self._normalize_key(key)
+        self._pressed_keys.discard(normalized)
+
+        # Reset hotkey active state when any required key is released
+        if normalized in self._required_keys:
+            self._hotkey_active = False
+
+    def _trigger_callback(self):
         """Called when the hotkey combo is detected."""
         logger.info(f"🎯 HOTKEY DETECTED: {self.hotkey_str}")
-        if self._running and self.callback:
+        if self.callback:
             logger.debug("Calling registered callback...")
             try:
                 self.callback()
                 logger.debug("Callback completed successfully")
             except Exception as e:
                 logger.error(f"Hotkey callback error: {e}", exc_info=True)
-        else:
-            logger.warning(f"Hotkey ignored: running={self._running}, callback={self.callback}")
