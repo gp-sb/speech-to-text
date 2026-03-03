@@ -212,15 +212,16 @@ class SpeechToTextApp:
 
         self._menu_bar_app = MenuBarApp()
 
-        # Pre-load model in background so first transcription is fast
-        preload_thread = threading.Thread(target=self._ensure_model_loaded)
-        preload_thread.daemon = True
-        preload_thread.start()
-
         # Start hotkey listener
         self.hotkey_listener.start()
 
         logger.info(f"Speech-to-text ready — press {self.config['hotkey']} to toggle recording")
+
+        # Pre-load model after event loop starts (avoids Metal/AppKit threading conflict)
+        @rumps.timer(1)
+        def preload_model(sender):
+            sender.stop()  # Only run once
+            threading.Thread(target=self._ensure_model_loaded, daemon=True).start()
 
         # Run the menu bar app (blocks)
         self._menu_bar_app.run()
