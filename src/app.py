@@ -227,30 +227,37 @@ class SpeechToTextApp:
             )
             sys.exit(1)
 
+        # Create outer reference for closure
+        outer_self = self
+
         class MenuBarApp(rumps.App):
             def __init__(app_self):
                 super().__init__("🎤", quit_button=None)
                 app_self.menu = [
                     rumps.MenuItem(
-                        f"Toggle: {self.config['hotkey']}",
-                        callback=lambda _: self.toggle(),
+                        f"Toggle: {outer_self.config['hotkey']}",
+                        callback=lambda _: outer_self.toggle(),
                     ),
                     None,  # Separator
                     rumps.MenuItem("Quit", callback=lambda _: rumps.quit_application()),
                 ]
+                app_self._initialized = False
+
+            @rumps.timer(0.5)
+            def delayed_init(app_self, sender):
+                """Start hotkey listener after event loop is running."""
+                if app_self._initialized:
+                    return
+                app_self._initialized = True
+                sender.stop()
+                logger.debug("Delayed init: starting hotkey listener...")
+                outer_self.hotkey_listener.start()
+                logger.debug("Delayed init: starting model preload...")
+                threading.Thread(target=outer_self._ensure_model_loaded, daemon=True).start()
 
         self._menu_bar_app = MenuBarApp()
 
-        # Start hotkey listener
-        self.hotkey_listener.start()
-
         logger.info(f"Speech-to-text ready — press {self.config['hotkey']} to toggle recording")
-
-        # Pre-load model after event loop starts (avoids Metal/AppKit threading conflict)
-        @rumps.timer(1)
-        def preload_model(sender):
-            sender.stop()  # Only run once
-            threading.Thread(target=self._ensure_model_loaded, daemon=True).start()
 
         # Run the menu bar app (blocks)
         self._menu_bar_app.run()
