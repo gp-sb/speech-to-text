@@ -136,4 +136,4 @@ python -m pytest tests/ -v
 
 ## Credits
 
-Inspired by [Super-Voice-Assistant](https://github.com/hounfodji/Super-Voice-Assistant) and John's recommendation to use local Parakeet models for system-wide speech-to-text.
+Inspired by [Super-Voice-Assistant](https://github.com/hounfodji/Super-Voice-Assistant) 
