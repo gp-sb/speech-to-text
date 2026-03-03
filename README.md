@@ -69,6 +69,33 @@ macOS prompts automatically on first use — just click Allow.
 
 - macOS with Apple Silicon (M1/M2/M3/M4)
 - Python 3.10+
+- FFmpeg (for audio processing)
+
+### Installing FFmpeg
+
+```bash
+# Via Homebrew
+brew install ffmpeg
+
+# Or via conda (if using a conda environment)
+conda install ffmpeg
+```
+
+### Using a Conda Environment
+
+If your system Python is older than 3.10, you can use a conda environment:
+
+```bash
+conda create -n speech-to-text python=3.12 ffmpeg -y
+conda activate speech-to-text
+pip install -r requirements.txt
+
+# Download the model
+python -c "from parakeet_mlx import from_pretrained; from_pretrained('mlx-community/parakeet-tdt-0.6b-v2')"
+
+# Run the app
+python -m src.app
+```
 
 ### Fallback for Intel Macs
 
