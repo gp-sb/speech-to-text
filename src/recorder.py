@@ -48,15 +48,17 @@ class Recorder:
 
     def start(self):
         """Start recording from the default microphone."""
+        logger.debug("Recorder.start() called")
         with self._lock:
             if self.is_recording:
-                logger.warning("Already recording \u2014 ignoring start()")
+                logger.warning("Already recording — ignoring start()")
                 return
 
             self._audio_chunks = []
             self._start_time = time.time()
             self.is_recording = True
 
+            logger.debug(f"Opening audio stream: sample_rate={self.sample_rate}, channels=1")
             self._stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=1,
@@ -65,7 +67,7 @@ class Recorder:
                 blocksize=1024,
             )
             self._stream.start()
-            logger.info("Recording started")
+            logger.info(f"🎙️ Recording started (sample_rate={self.sample_rate}Hz)")
 
             # Safety auto-stop
             self._auto_stop_timer = threading.Timer(
@@ -73,6 +75,7 @@ class Recorder:
             )
             self._auto_stop_timer.daemon = True
             self._auto_stop_timer.start()
+            logger.debug(f"Auto-stop timer set for {self.max_duration}s")
 
     def stop(self) -> np.ndarray:
         """
@@ -82,35 +85,43 @@ class Recorder:
             NumPy array of shape (n_samples,) with float32 audio data.
             Returns empty array if nothing was recorded.
         """
+        logger.debug("Recorder.stop() called")
         with self._lock:
             if not self.is_recording:
-                logger.warning("Not recording \u2014 ignoring stop()")
+                logger.warning("Not recording — ignoring stop()")
                 return np.array([], dtype=np.float32)
 
             self.is_recording = False
+            logger.debug("is_recording set to False")
 
             if self._auto_stop_timer:
                 self._auto_stop_timer.cancel()
                 self._auto_stop_timer = None
+                logger.debug("Auto-stop timer cancelled")
 
             if self._stream:
+                logger.debug("Stopping audio stream...")
                 self._stream.stop()
                 self._stream.close()
                 self._stream = None
+                logger.debug("Audio stream closed")
 
             duration = time.time() - self._start_time
-            logger.info(f"Recording stopped \u2014 {duration:.1f}s captured")
+            logger.info(f"⏹️ Recording stopped — {duration:.1f}s captured, {len(self._audio_chunks)} chunks")
 
             if not self._audio_chunks:
+                logger.warning("No audio chunks captured!")
                 return np.array([], dtype=np.float32)
 
             # Concatenate all chunks into a single array
+            logger.debug(f"Concatenating {len(self._audio_chunks)} audio chunks...")
             audio = np.concatenate(self._audio_chunks, axis=0)
 
             # Flatten from (n, 1) to (n,) if needed
             if audio.ndim > 1:
                 audio = audio.flatten()
 
+            logger.debug(f"Final audio: shape={audio.shape}, min={audio.min():.4f}, max={audio.max():.4f}")
             return audio
 
     def _audio_callback(self, indata, frames, time_info, status):

@@ -94,10 +94,15 @@ def transcribe(audio: np.ndarray, sample_rate: int = 16000) -> str:
     """
     global _model
 
+    logger.debug(f"transcribe() called: audio.shape={audio.shape}, sample_rate={sample_rate}")
+    logger.debug(f"Audio stats: min={audio.min():.4f}, max={audio.max():.4f}, rms={np.sqrt(np.mean(audio**2)):.6f}")
+
     if _model is None:
+        logger.debug("Model not loaded, loading now...")
         load_model()
 
     engine = _get_engine()
+    logger.debug(f"Using engine: {engine}")
 
     if engine == "parakeet":
         return _transcribe_parakeet(audio, sample_rate)
@@ -107,12 +112,16 @@ def transcribe(audio: np.ndarray, sample_rate: int = 16000) -> str:
 
 def _transcribe_parakeet(audio: np.ndarray, sample_rate: int) -> str:
     """Transcribe using parakeet-mlx."""
+    import time
     from parakeet_mlx import DecodingConfig, SentenceConfig
+
+    logger.debug("_transcribe_parakeet() called")
 
     # parakeet-mlx expects a file path, so write audio to a temp WAV file
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         temp_path = f.name
         sf.write(temp_path, audio, sample_rate)
+        logger.debug(f"Wrote temp audio file: {temp_path}")
 
     try:
         config = DecodingConfig(
@@ -122,20 +131,32 @@ def _transcribe_parakeet(audio: np.ndarray, sample_rate: int) -> str:
                 max_duration=60.0,
             )
         )
+        logger.debug("Calling parakeet model.transcribe()...")
+        start = time.time()
         result = _model.transcribe(temp_path, decoding_config=config)
+        elapsed = time.time() - start
+        logger.debug(f"Parakeet transcribe() completed in {elapsed:.2f}s")
+        logger.debug(f"Raw result type: {type(result)}")
 
         # Extract text from sentences
         if hasattr(result, "sentences") and result.sentences:
+            logger.debug(f"Found {len(result.sentences)} sentences")
+            for i, s in enumerate(result.sentences):
+                logger.debug(f"  Sentence {i}: {repr(s.text)}")
             text = " ".join(s.text.strip() for s in result.sentences if s.text.strip())
         elif hasattr(result, "text"):
             text = result.text.strip()
+            logger.debug(f"Using result.text: {repr(text)}")
         else:
             text = str(result).strip()
+            logger.debug(f"Using str(result): {repr(text)}")
 
+        logger.info(f"🎤 Parakeet transcription: {repr(text)}")
         return text
 
     finally:
         os.unlink(temp_path)
+        logger.debug(f"Deleted temp file: {temp_path}")
 
 
 def _transcribe_faster_whisper(audio: np.ndarray, sample_rate: int) -> str:

@@ -107,84 +107,113 @@ class SpeechToTextApp:
 
     def toggle(self):
         """Toggle recording on/off. Called by the hotkey listener."""
+        logger.debug("toggle() called")
         with self._lock:
+            logger.debug(f"Current state: is_recording={self.is_recording}")
             if self.is_recording:
+                logger.info(">>> STOPPING recording")
                 self._stop_recording()
             else:
+                logger.info(">>> STARTING recording")
                 self._start_recording()
 
     def _start_recording(self):
         """Start recording audio."""
+        logger.debug("_start_recording() entered")
         self.is_recording = True
         logger.info("🔴 Recording started")
 
         if self.config.get("sound_on_start"):
+            logger.debug("Playing start sound")
             play_sound("start")
 
+        logger.debug("Calling recorder.start()")
         self.recorder.start()
+        logger.debug("Recorder started successfully")
 
         # Update menu bar if available
         if hasattr(self, "_menu_bar_app") and self._menu_bar_app:
+            logger.debug("Updating menu bar icon to 🔴")
             self._menu_bar_app.title = "🔴"
 
     def _stop_recording(self):
         """Stop recording, transcribe, and paste."""
+        logger.debug("_stop_recording() entered")
         self.is_recording = False
 
         if self.config.get("sound_on_stop"):
+            logger.debug("Playing stop sound")
             play_sound("stop")
 
         # Update menu bar
         if hasattr(self, "_menu_bar_app") and self._menu_bar_app:
+            logger.debug("Updating menu bar icon to ⏳")
             self._menu_bar_app.title = "⏳"
 
         logger.info("⏳ Processing...")
 
         # Get the recorded audio
+        logger.debug("Calling recorder.stop()")
         audio = self.recorder.stop()
+        logger.debug(f"Got audio: shape={audio.shape}, dtype={audio.dtype}, size={audio.size}")
 
         if audio.size == 0:
-            logger.warning("No audio captured")
+            logger.warning("No audio captured - nothing to transcribe")
             if hasattr(self, "_menu_bar_app") and self._menu_bar_app:
                 self._menu_bar_app.title = "🎤"
             return
 
+        logger.info(f"Captured {len(audio)/self.config['sample_rate']:.1f}s of audio ({len(audio)} samples)")
+
         # Transcribe in a background thread to not block the hotkey listener
+        logger.debug("Starting transcription thread")
         thread = threading.Thread(target=self._transcribe_and_paste, args=(audio,))
         thread.daemon = True
         thread.start()
 
     def _transcribe_and_paste(self, audio):
         """Transcribe audio and paste result at cursor."""
+        import time
+        logger.debug("_transcribe_and_paste() started")
         try:
             # Ensure model is loaded
+            logger.debug("Ensuring model is loaded...")
             self._ensure_model_loaded()
+            logger.debug("Model ready")
 
             # Transcribe
+            logger.info("Starting transcription...")
             from .transcriber import transcribe
+            start_time = time.time()
             text = transcribe(audio, sample_rate=self.config["sample_rate"])
+            elapsed = time.time() - start_time
+            logger.info(f"Transcription completed in {elapsed:.2f}s")
+            logger.debug(f"Raw transcription result: {repr(text)}")
 
             if text and text.strip():
-                logger.info(f"Transcribed: {text[:80]}{'...' if len(text) > 80 else ''}")
+                logger.info(f"✅ Transcribed ({len(text)} chars): {text[:100]}{'...' if len(text) > 100 else ''}")
 
                 # Paste at cursor
+                logger.debug("Calling paste_text()")
                 from .paster import paste_text
                 paste_text(
                     text,
                     restore_clipboard=self.config.get("restore_clipboard", True),
                     add_trailing_space=self.config.get("add_trailing_space", True),
                 )
+                logger.info("✅ Text pasted at cursor")
             else:
-                logger.warning("Transcription returned empty text")
+                logger.warning("⚠️ Transcription returned empty text - no speech detected?")
                 play_sound("error")
 
         except Exception as e:
-            logger.error(f"Transcription/paste failed: {e}")
+            logger.error(f"❌ Transcription/paste failed: {e}", exc_info=True)
             play_sound("error")
 
         finally:
             # Reset menu bar icon
             if hasattr(self, "_menu_bar_app") and self._menu_bar_app:
+                logger.debug("Resetting menu bar icon to 🎤")
                 self._menu_bar_app.title = "🎤"
 
     def run_menu_bar(self):
@@ -250,10 +279,10 @@ class SpeechToTextApp:
 
 def main():
     """Entry point."""
-    # Set up logging
+    # Set up logging - DEBUG level for verbose output
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
 

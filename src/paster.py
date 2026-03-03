@@ -22,8 +22,9 @@ def paste_text(text: str, restore_clipboard: bool = True, add_trailing_space: bo
         restore_clipboard: If True, saves and restores the previous clipboard contents
         add_trailing_space: If True, appends a space after the text
     """
+    logger.debug(f"paste_text() called: text={repr(text[:50])}..., restore={restore_clipboard}")
     if not text or not text.strip():
-        logger.warning("Empty text \u2014 nothing to paste")
+        logger.warning("Empty text — nothing to paste")
         return
 
     text = text.strip()
@@ -35,21 +36,25 @@ def paste_text(text: str, restore_clipboard: bool = True, add_trailing_space: bo
     try:
         # Save current clipboard contents
         if restore_clipboard:
+            logger.debug("Saving current clipboard...")
             old_clipboard = _get_clipboard()
+            logger.debug(f"Saved clipboard: {len(old_clipboard) if old_clipboard else 0} chars")
 
         # Copy transcribed text to clipboard
+        logger.debug("Setting clipboard to transcribed text...")
         _set_clipboard(text)
 
         # Small delay to ensure clipboard is synced
         time.sleep(0.05)
 
         # Simulate Cmd+V via AppleScript
+        logger.debug("Simulating Cmd+V paste...")
         _simulate_paste()
 
-        logger.info(f"Pasted {len(text)} characters at cursor")
+        logger.info(f"📋 Pasted {len(text)} characters at cursor")
 
     except Exception as e:
-        logger.error(f"Paste failed: {e}")
+        logger.error(f"❌ Paste failed: {e}", exc_info=True)
         raise
 
     finally:

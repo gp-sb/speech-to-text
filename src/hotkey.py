@@ -131,9 +131,13 @@ class HotkeyListener:
 
     def _on_hotkey(self):
         """Called when the hotkey combo is detected."""
+        logger.info(f"🎯 HOTKEY DETECTED: {self.hotkey_str}")
         if self._running and self.callback:
-            logger.debug(f"Hotkey {self.hotkey_str} triggered")
+            logger.debug("Calling registered callback...")
             try:
                 self.callback()
+                logger.debug("Callback completed successfully")
             except Exception as e:
-                logger.error(f"Hotkey callback error: {e}")
+                logger.error(f"Hotkey callback error: {e}", exc_info=True)
+        else:
+            logger.warning(f"Hotkey ignored: running={self._running}, callback={self.callback}")
